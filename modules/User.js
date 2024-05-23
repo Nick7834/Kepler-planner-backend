@@ -54,7 +54,7 @@ const UserSchema = new Schema({
     },
     avatarUrl: {
         type: String,
-        default: '/avatars/852.jpg'
+        default: '/avatars/avatar-cacti-cactus-svgrepo-com.png'
     },
     backgroundImage: {
         type: String,
