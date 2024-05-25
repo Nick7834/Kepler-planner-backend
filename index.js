@@ -13,7 +13,7 @@ import rateLimit from 'express-rate-limit';
 // db 
 
 mongoose.connect(
-  process.env.MONGODB_URL,
+  'mongodb+srv://keplerfacts7070:mVZDzRPsVsMoV8MV@kepler-planer.yjwyyac.mongodb.net/kepler-planer?retryWrites=true&w=majority&appName=kepler-planer',
 ).then(() => console.log('DB OK'))
 .catch((err) => console.log('DB error', err));
 
@@ -22,6 +22,8 @@ app.use(cors());
 app.use(express.json());
 app.use('/backgrounds', express.static('backgrounds'));
 app.use('/avatars', express.static('avatars'));
+
+app.set('trust proxy', true);
 
 const readLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 минута
