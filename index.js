@@ -13,7 +13,7 @@ import rateLimit from 'express-rate-limit';
 // db 
 
 mongoose.connect(
-  'mongodb+srv://keplerfacts7070:mVZDzRPsVsMoV8MV@kepler-planer.yjwyyac.mongodb.net/kepler-planer?retryWrites=true&w=majority&appName=kepler-planer',
+  process.env.MONGODB_URL,
 ).then(() => console.log('DB OK'))
 .catch((err) => console.log('DB error', err));
 
