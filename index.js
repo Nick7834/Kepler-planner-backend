@@ -23,8 +23,6 @@ app.use(express.json());
 app.use('/backgrounds', express.static('backgrounds'));
 app.use('/avatars', express.static('avatars'));
 
-app.set('trust proxy', true);
-
 const readLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 минута
   max: 150, // до 120 запросов в минуту
