@@ -555,9 +555,39 @@ export const updateFolder = async (req, res) => {
             return res.status(404).json({ message: 'Папка не найдена' });
         }
 
-        folder.set({
-            name,
+        // Обновляем имя папки
+        folder.name = name;
+
+        // Обновляем имя папки в задачах
+        user.tasks.forEach(task => {
+            if (task.folderId && task.folderId.toString() === folderId) {
+                task.folder = name;
+            }
         });
+
+        // Обновляем имя папки в todayTasks
+        user.todayTasks.forEach(task => {
+            if (task.folderId && task.folderId.toString() === folderId) {
+                task.folder = name;
+            }
+        });
+
+        // Обновляем имя папки в weekTasks
+        user.weekTasks.forEach(dayTasks => {
+            if (Array.isArray(dayTasks.tasks)) {
+                dayTasks.tasks.forEach(task => {
+                    if (task.folderId && task.folderId.toString() === folderId) {
+                        task.folder = name;
+                    }
+                });
+            }
+        });
+
+        // Обновляем имя папки внутри задач, находящихся в самой папке
+        folder.tasks.forEach(task => {
+            task.folder = name;
+        });
+
         await user.save();
 
         return res.json(folder); // Отправляем обновленную папку
@@ -662,33 +692,39 @@ export const deleteFolder = async (req, res) => {
         const userId = req.userId;
         const folderId = req.params.folderId;
 
+        // Находим пользователя по ID
         const user = await User.findById(userId);
         if (!user) {
             return res.status(404).json({ message: 'Пользователь не найден' });
         }
 
-        // Находим папку по ее идентификатору
+        // Находим папку, которую нужно удалить
         const folder = user.folders.id(folderId);
         if (!folder) {
             return res.status(404).json({ message: 'Папка не найдена' });
         }
 
-        if (folder.importance === 'importance') {
-            return res.status(400).json({ message: 'Нельзя удалить персональную папку' });
-        }
+        // Получаем список задач в удаляемой папке
+        const tasksInFolder = folder.tasks.map(task => task._id.toString());
 
-        // Удаляем папку из массива папок пользователя
-        user.folders.pull(folderId);
+        // Удаляем задачи из списка всех задач пользователя
+        user.tasks = user.tasks.filter(task => !tasksInFolder.includes(task._id.toString()));
 
-        // Удаляем все задачи из этой папки
-        folder.tasks.forEach(taskId => {
-            user.tasks.pull(taskId);
+        // Удаляем задачи из списка задач на сегодня
+        user.todayTasks = user.todayTasks.filter(task => !tasksInFolder.includes(task._id.toString()));
+
+        // Удаляем задачи из списка задач на неделю
+        user.weekTasks.forEach(weekTask => {
+            weekTask.tasks = weekTask.tasks.filter(task => !tasksInFolder.includes(task._id.toString()));
         });
 
-        // Сохраняем обновленного пользователя
+        // Удаляем саму папку
+        user.folders = user.folders.filter(f => !f._id.equals(folderId));
+
+        // Сохраняем изменения
         await user.save();
 
-        return res.json({ message: 'Папка успешно удалена' });
+        return res.status(204).send(); // HTTP 204 No Content
     } catch (err) {
         console.error(err);
         return res.status(500).json({ message: 'Ошибка сервера' });
