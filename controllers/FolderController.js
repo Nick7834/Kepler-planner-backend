@@ -700,6 +700,13 @@ export const deleteFolder = async (req, res) => {
 
         // Находим папку, которую нужно удалить
         const folder = user.folders.id(folderId);
+
+        // Проверяем, если папка имеет поле importance: 'importance', то её удалять нельзя
+        if (folder && folder.importance === 'importance') {
+            return res.status(400).json({ message: 'Эту папку нельзя удалить' });
+        }
+
+        // Если папка не найдена
         if (!folder) {
             return res.status(404).json({ message: 'Папка не найдена' });
         }

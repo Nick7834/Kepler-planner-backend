@@ -13,7 +13,7 @@ import rateLimit from 'express-rate-limit';
 // db 
 
 mongoose.connect(
-   process.env.MONGODB_URL,
+  MONGODB_URL,
 ).then(() => console.log('DB OK'))
 .catch((err) => console.log('DB error', err));
 
