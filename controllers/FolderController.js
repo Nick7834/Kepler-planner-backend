@@ -2,6 +2,12 @@ import User from '../modules/User.js';
 import mongoose from 'mongoose';
 const { ObjectId } = mongoose.Types;
 
+import moment from 'moment-timezone';
+
+const getTimezoneFromIP = (ip) => {
+    return 'Europe/Moscow'; 
+};
+
 export const createTodayTask = async (req, res) => {
     try {
         const { title } = req.body;
@@ -12,7 +18,12 @@ export const createTodayTask = async (req, res) => {
             return res.status(404).json({ message: 'Пользователь не найден' });
         }
 
+        const userTimezone = getTimezoneFromIP(req.ip); // Получаем временную зону пользователя по IP
+
         const taskId = new ObjectId();
+        // Получаем текущее время в соответствии с временной зоной пользователя
+        const nowInUserTime = moment().tz(userTimezone); 
+
         // Создаем новую задачу
         const newTask = {
             _id: taskId, // Генерируем уникальный ObjectId
@@ -21,15 +32,14 @@ export const createTodayTask = async (req, res) => {
             pin: false,
             folder: user.folders[0].name,
             folderId: user.folders[0]._id,
-            dueDate: new Date(),
+            dueDate: nowInUserTime.toDate(), // Сохраняем время задачи по времени пользователя
         };
 
         user.folders[0].tasks.push(newTask);
         user.todayTasks.push(newTask);
 
         // Находим текущий день недели (0 - воскресенье, 1 - понедельник, ..., 6 - суббота)
-        const today = new Date();
-        const currentDayOfWeek = today.getDay();
+        const currentDayOfWeek = nowInUserTime.day(); // Используем day из moment, чтобы получить день недели
 
         // Ищем или создаем объект задач для текущего дня недели
         let dayTasks = user.weekTasks.find(dayTask => dayTask.dayOfWeek === currentDayOfWeek);
@@ -63,11 +73,18 @@ export const createTask = async (req, res) => {
         }
 
         const taskId = new ObjectId();
-        // Создаем новую задачу
+
+        // Получаем временную зону пользователя по IP (если использовать IP)
+        const userTimezone = getTimezoneFromIP(req.ip); // Можно заменить на метод для получения по IP, например geoip
+
+        // Получаем текущее время в локальной временной зоне пользователя
+        const nowInUserTime = moment().tz(userTimezone);
+
+        // Создаем новую задачу с учетом времени пользователя
         const newTask = {
             _id: taskId, // Генерируем уникальный ObjectId
             title,
-            dueDate: new Date(),
+            dueDate: nowInUserTime.toDate(), // Сохраняем дату в локальной временной зоне пользователя
             done: false,
             pin: false,
             folder: user.folders[0].name,
@@ -98,6 +115,9 @@ export const addExistingTaskToToday = async (req, res) => {
             return res.status(404).json({ message: 'Пользователь не найден' });
         }
 
+        // Получаем временную зону пользователя по IP
+        const userTimezone = getTimezoneFromIP(req.ip); // Применяем функцию getTimezoneFromIP
+
         // Поиск задачи среди всех задач пользователя
         let existingTask = null;
         let folderContainingTask = null;
@@ -119,8 +139,8 @@ export const addExistingTaskToToday = async (req, res) => {
             return res.status(400).json({ message: 'Задача уже добавлена на сегодня' });
         }
 
-        // Обновляем дату выполнения задачи
-        existingTask.dueDate = new Date();
+        // Обновляем дату выполнения задачи с учетом временной зоны пользователя
+        existingTask.dueDate = moment().tz(userTimezone).toDate(); // Устанавливаем время с учетом временной зоны
 
         // Добавляем задачу в список на сегодня
         user.todayTasks.push(existingTask);
@@ -181,13 +201,17 @@ export const allTasksToday = async (req, res) => {
             return res.status(404).json({ message: 'Пользователь не найден' });
         }
 
-        const today = new Date();
-        const todayString = today.toDateString(); // получаем строку текущей даты
+        // Получаем временную зону пользователя
+        const userTimezone = getTimezoneFromIP(req.ip);  // можно заменить на функцию получения временной зоны пользователя, если она есть
+
+        const today = moment().tz(userTimezone).startOf('day'); // Начало дня в часовой зоне пользователя
+        const todayString = today.format('YYYY-MM-DD'); // Форматируем как строку, чтобы можно было сравнить
 
         // Фильтруем задачи, чтобы оставить только те, которые соответствуют текущему дню
-        const tasksForTodayOnly = user.todayTasks.filter(task =>
-            task.dueDate && task.dueDate.toDateString() === todayString
-        );
+        const tasksForTodayOnly = user.todayTasks.filter(task => {
+            const taskDueDate = moment(task.dueDate).tz(userTimezone).startOf('day');
+            return taskDueDate.format('YYYY-MM-DD') === todayString;
+        });
 
         // Обновляем список задач на сегодня, если он изменился
         if (user.todayTasks.length !== tasksForTodayOnly.length) {
@@ -217,24 +241,25 @@ export const createTaskForDayOfWeek = async (req, res) => {
             return res.status(400).json({ message: 'Invalid day of the week. It must be a number between 0 (Sunday) and 6 (Saturday).' });
         }
 
-        const getNextDayOfWeek = (dayOfWeek) => {
-            const today = new Date(new Date().toISOString().slice(0, 10)); // Устанавливаем начало текущего дня в UTC
-            const currentDayOfWeek = today.getUTCDay(); // Получаем день недели по UTC
-            
+        const userTimezone = getTimezoneFromIP(req.ip); // Получаем временную зону пользователя
+
+        const getNextDayOfWeek = (dayOfWeek, userTimezone) => {
+            const today = moment().tz(userTimezone).startOf('day'); // Устанавливаем начало текущего дня по времени пользователя
+            const currentDayOfWeek = today.day(); // Получаем день недели по времени пользователя
+
             let daysToAdd = dayOfWeek - currentDayOfWeek;
             if (daysToAdd < 0) {
                 daysToAdd += 7; // Если выбранный день уже прошел в этой неделе, добавляем 7 дней
             }
         
-            const nextDate = new Date(today);
-            nextDate.setUTCDate(today.getUTCDate() + daysToAdd); // Добавляем дни, используя UTC
+            const nextDate = today.add(daysToAdd, 'days');
             return nextDate;
         };
 
         const newTask = {
             _id: new ObjectId(),
             title,
-            dueDate: getNextDayOfWeek(dayOfWeek),
+            dueDate: getNextDayOfWeek(dayOfWeek, userTimezone).toDate(), // Используем вычисленный момент с учетом временной зоны
             done: false,
             pin: false,
             folder: user.folders[0].name,
@@ -270,18 +295,18 @@ export const getAllWeekDays = async (req, res) => {
             return res.status(404).json({ message: 'Пользователь не найден' });
         }
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0); // Начало текущего дня
+        const userTimezone = getTimezoneFromIP(req.ip); // Получаем временную зону пользователя
+
+        const today = moment().tz(userTimezone).startOf('day'); // Начало текущего дня по времени пользователя
 
         const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
         let weekDays = [];
 
         for (let i = 0; i < 7; i++) {
-            const dayDate = new Date(today);
-            dayDate.setDate(today.getDate() + i);
+            const dayDate = today.clone().add(i, 'days'); // Клонируем объект today и добавляем дни
             weekDays.push({
-                dayOfWeek: daysOfWeek[dayDate.getDay()],
-                dayIndex: dayDate.getDay(),
+                dayOfWeek: daysOfWeek[dayDate.day()],
+                dayIndex: dayDate.day(),
                 tasks: []
             });
         }
@@ -289,9 +314,9 @@ export const getAllWeekDays = async (req, res) => {
         // Добавление задач в соответствующие дни
         user.weekTasks.forEach(weekTask => {
             weekTask.tasks.forEach(task => {
-                const taskDate = new Date(task.dueDate);
-                taskDate.setHours(0, 0, 0, 0);
-                const diff = Math.floor((taskDate - today) / (1000 * 3600 * 24));
+                const taskDate = moment(task.dueDate).tz(userTimezone).startOf('day'); // Преобразуем dueDate в момент времени с учетом временной зоны пользователя
+                const diff = taskDate.diff(today, 'days'); // Разница в днях
+
                 if (diff >= 0 && diff < 7) {
                     weekDays[diff].tasks.push(task);
                 }
@@ -372,14 +397,17 @@ export const createTaskInFolder = async (req, res) => {
             return res.status(404).json({ message: 'Папка не найдена' });
         }
 
+        // Получаем временную зону пользователя по IP
+        const userTimezone = getTimezoneFromIP(req.ip); // Применяем функцию getTimezoneFromIP
+
         // Генерируем уникальный ObjectId для новой задачи
         const taskId = new ObjectId();
 
-        // Создаем новую задачу с указанием папки
+        // Создаем новую задачу с указанием папки и временной зоны для dueDate
         const newTask = {
             _id: taskId,
             title,
-            dueDate: dueDate ? new Date(dueDate) : new Date(), // Если дата не указана, используем сегодняшнюю дату
+            dueDate: dueDate ? moment(dueDate).tz(userTimezone).toDate() : moment().tz(userTimezone).toDate(), // Устанавливаем дату с учетом временной зоны
             done: false,
             folder: folder.name, // Название папки
             folderId: folder._id,
@@ -499,9 +527,11 @@ export const updateTask = async (req, res) => {
         let taskUpdated = false;
         let updatedTask = null;  // Добавлено для хранения обновленной задачи
 
+        const userTimezone = getTimezoneFromIP(req.ip); // Получаем временную зону пользователя
+
         const updateData = {};
         if (title !== undefined) updateData.title = title;
-        if (dueDate !== undefined) updateData.dueDate = new Date(dueDate);
+        if (dueDate !== undefined) updateData.dueDate = moment(dueDate).tz(userTimezone).toDate(); // Устанавливаем дату с учетом временной зоны
         if (done !== undefined) updateData.done = done;
         if (pin !== undefined) updateData.pin = pin;
 
@@ -513,10 +543,15 @@ export const updateTask = async (req, res) => {
             }
         };
 
+        // Обновляем задачу в основном списке задач пользователя
         updateTaskFields(user.tasks.id(taskId));
+        
+        // Обновляем задачу в папках
         user.folders.forEach(folder => {
             updateTaskFields(folder.tasks.id(taskId));
         });
+
+        // Обновляем задачу в списке задач на неделю
         user.weekTasks.forEach(weekTask => {
             weekTask.tasks.forEach(task => {
                 if (task._id.equals(taskId)) {
@@ -524,8 +559,11 @@ export const updateTask = async (req, res) => {
                 }
             });
         });
+
+        // Обновляем задачу в списке задач на сегодня
         updateTaskFields(user.todayTasks.id(taskId));
 
+        // Сохраняем изменения в модели пользователя
         await user.save();
 
         if (taskUpdated) {

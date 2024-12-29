@@ -8,12 +8,14 @@ import { UseController, TaskController, FolderController } from './controllers/i
 import cors from 'cors';
 import fs from 'fs';
 import User from './modules/User.js';
-import rateLimit from 'express-rate-limit'; 
+import rateLimit from 'express-rate-limit'; import dotenv from 'dotenv';
+
+dotenv.config();
 
 // db 
 
 mongoose.connect(
-  process.env.MONGODB_URL,
+    process.env.MONGODB_URL,
 ).then(() => console.log('DB OK'))
 .catch((err) => console.log('DB error', err));
 
