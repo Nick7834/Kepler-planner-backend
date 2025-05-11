@@ -1,6 +1,7 @@
 import express from 'express'
 import mongoose from 'mongoose'
 import multer from 'multer';
+import { put } from '@vercel/blob';
 
 import { registerValidation, loginValidation } from './validations/validations.js';
 import { handleValidationErrors, checkAuth }from './utils/index.js';
@@ -38,21 +39,19 @@ const modifyLimiter = rateLimit({
   message: "Слишком много запросов, попробуйте позже."
 });
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-      cb(null, 'avatars');
-  },
-  filename: (req, file, cb) => {
-      cb(null, `${Date.now()}_${file.originalname}`);
-  }
-});
-
+const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 app.patch('/upload-avatar', checkAuth, upload.single('avatar'), async (req, res) => {
   try {
       const userId = req.userId;
-      const avatarUrl = `/avatars/${req.file.filename}`;
+     
+      const blob = await put(`avatars/${Date.now()}_${req.file.originalname}`, req.file.buffer, {
+        access: 'public',
+        contentType: req.file.mimetype,
+      });
+
+      const avatarUrl = blob.url;
 
       const user = await User.findByIdAndUpdate(userId, { avatarUrl }, { new: true });
 
